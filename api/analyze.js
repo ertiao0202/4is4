@@ -1,15 +1,9 @@
-// api/analyze.js  Node.js Runtime - OpenAI分析端点
+// api/analyze.js  Node.js Runtime - 模拟版
 export const runtime = 'nodejs';
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
-  }
-
-  // 检查API密钥
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return new Response('Missing OPENAI_API_KEY environment variable', { status: 500 });
   }
 
   try {
@@ -20,43 +14,26 @@ export default async function handler(req) {
       return new Response('content or title empty', { status: 400 });
     }
 
-    // 使用fetch直接调用OpenAI API
-    const prompt = `FactLens-EN-v2
-Title:${title}
-Credibility:X/10
-Facts:1.conf:0.XX<fact>sentence</fact>
-Opinions:1.conf:0.XX<opinion>sentence</opinion>
-Bias:-E:N conf:0.XX -B:N -M:N -F:N -Stance:neutral/leaning X%
-Pub:xxx(≤15w) PR:xxx(≤8w) Sum:xxx(≤8w)
-Text:${content}`.trim();
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        max_tokens: 600,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API Error:', errorData);
-      return new Response(JSON.stringify({ error: errorData }), { status: response.status });
-    }
-
-    const data = await response.json();
+    // 模拟API延迟
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
-    return new Response(JSON.stringify(data), {
-      headers: { 'content-type': 'application/json' },
+    // 返回模拟结果
+    const mockResponse = {
+      choices: [{
+        message: {
+          content: `Summary: This is a sample analysis of the provided content. The text discusses various aspects of the topic with mixed sentiment and moderate bias.\n\nFacts: 1. <fact>The content mentions specific details about the topic</fact> 2. <fact>There are measurable aspects mentioned in the text</fact>\n\nOpinions: 1. <opinion>The author expresses a particular viewpoint on the subject</opinion> 2. <opinion>There are subjective assessments made in the text</opinion>\n\nBias: -E:Neutral -B:Negative -M:Medium -F:Factual -Stance:slightly leaning 30%\n\nPub: The publisher should provide more balanced perspectives and verify claims. PR: Consider addressing concerns raised and providing additional context.\n\nCredibility:7.5/10\nSource Credibility:8.0/10\nFact Density:7.0/10\nEmotional Neutrality:6.5/10\nConsistency:8.5/10`
+        }
+      }]
+    };
+
+    return new Response(JSON.stringify(mockResponse), { 
+      headers: { 
+        'content-type': 'application/json',
+        'X-Cache': 'MISS' 
+      } 
     });
   } catch (e) {
-    console.error('API Error:', e);
+    console.error('处理请求时出错:', e);
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 }
