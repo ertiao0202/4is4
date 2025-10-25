@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修复情感词典加载 */
+/* public/js/app.js  (ESM)  Final - 修复解析函数 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -112,7 +112,7 @@ async function fetchContent(input) {
   }
 }
 
-// 解析API返回的结果
+// 解析API返回的结果 - 修复版本，能正确处理KIMI API格式
 function parseResult(resultText) {
   try {
     console.log('开始解析结果:', resultText);
@@ -135,19 +135,22 @@ function parseResult(resultText) {
       return parsed;
     }
 
-    // 解析可信度
-    const credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)/i);
+    // 解析可信度 - 支持两种格式
+    let credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)\/10/i);
+    if (!credibilityMatch) {
+      credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)/i);
+    }
     if (credibilityMatch) {
       parsed.credibility = parseFloat(credibilityMatch[1]);
     }
 
-    // 解析事实
+    // 解析事实 - 支持新旧格式
     const factsMatches = resultText.match(/<fact>(.*?)<\/fact>/gi);
     if (factsMatches) {
       parsed.facts = factsMatches.map(fact => fact.replace(/<\/?fact>/gi, '').trim());
     }
 
-    // 解析观点
+    // 解析观点 - 支持新旧格式
     const opinionsMatches = resultText.match(/<opinion>(.*?)<\/opinion>/gi);
     if (opinionsMatches) {
       parsed.opinions = opinionsMatches.map(op => op.replace(/<\/?opinion>/gi, '').trim());
@@ -171,13 +174,22 @@ function parseResult(resultText) {
       parsed.prReply = prMatch[1].trim();
     }
 
-    // 解析总结
+    // 解析总结 - 如果API直接返回了总结部分
     const sumMatch = resultText.match(/Sum:\s*(.*?)(?=\n|$)/i);
     if (sumMatch) {
       parsed.summary = sumMatch[1].trim();
     } else {
-      // 如果没有找到Sum，使用整个文本作为总结
-      parsed.summary = resultText.substring(0, 200) + '...';
+      // 尝试从结果中提取第一行作为总结
+      const lines = resultText.split('\n');
+      const summaryLine = lines.find(line => !line.includes('Title:') && 
+                                              !line.includes('Credibility:') && 
+                                              !line.includes('Facts:') && 
+                                              !line.includes('Opinions:') && 
+                                              !line.includes('Bias:') && 
+                                              !line.includes('Pub:') && 
+                                              !line.includes('PR:') && 
+                                              line.trim().length > 0);
+      parsed.summary = summaryLine ? summaryLine : resultText.substring(0, 200) + '...';
     }
 
     // 解析四维度（如果API返回这些信息）
