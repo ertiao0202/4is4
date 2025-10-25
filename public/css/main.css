@@ -173,6 +173,12 @@ body {
   text-align: center;
 }
 
+.dim-item h3 {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--secondary);
+}
+
 .dim-bar {
   height: 20px;
   background: #e9ecef;
@@ -186,6 +192,13 @@ body {
   background: var(--primary);
   width: 0%;
   transition: width 0.5s;
+}
+
+.dim-item p {
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin: 0.5rem 0 0;
+  color: var(--primary);
 }
 
 .summary {
@@ -204,6 +217,24 @@ body {
 
 .hidden {
   display: none !important;
+}
+
+/* 为事实、观点、偏见标签添加样式 */
+.result-section li:has(> strong) {
+  font-weight: bold;
+}
+
+/* 为特定类型的内容添加颜色 */
+.fact {
+  color: var(--success);
+}
+
+.opinion {
+  color: var(--warning);
+}
+
+.bias {
+  color: var(--danger);
 }
 
 @media (max-width: 768px) {
