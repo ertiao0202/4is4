@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 增强解析函数 */
+/* public/js/app.js  (ESM)  Final - 完整版 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -281,6 +281,45 @@ function parseResult(resultText) {
   }
 }
 
+// 创建雷达图
+function createRadarChart(dimensions) {
+  if (!ui.radarEl) return;
+  
+  // 销毁现有图表
+  if (radarChart) {
+    radarChart.destroy();
+  }
+  
+  // 创建新图表
+  radarChart = new Chart(ui.radarEl, {
+    type: 'radar',
+    data: {
+      labels: ['Source Credibility', 'Fact Density', 'Emotional Neutrality', 'Consistency'],
+      datasets: [{
+        label: 'Analysis Score',
+        data: [dimensions.ts, dimensions.fd, dimensions.eb, dimensions.cs],
+        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+        borderColor: 'rgba(37, 99, 235, 1)',
+        pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(37, 99, 235, 1)'
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 10,
+          ticks: {
+            stepSize: 2
+          }
+        }
+      }
+    }
+  });
+}
+
 // 渲染结果
 function render(report) {
   try {
@@ -317,6 +356,9 @@ function render(report) {
       if (fdBar) fdBar.style.width = `${Math.min(100, report.dimensions.fd * 10)}%`;
       if (ebBar) ebBar.style.width = `${Math.min(100, report.dimensions.eb * 10)}%`;
       if (csBar) csBar.style.width = `${Math.min(100, report.dimensions.cs * 10)}%`;
+      
+      // 创建雷达图
+      createRadarChart(report.dimensions);
     }
 
     // 清空并填充结果列表
@@ -537,6 +579,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleAnalyze();
+      }
+    });
+  }
+  
+  // 雷达图切换功能
+  if (ui.radarTgl && ui.radarEl) {
+    ui.radarTgl.addEventListener('click', () => {
+      ui.radarEl.classList.toggle('hidden');
+      const text = ui.radarTgl.textContent;
+      if (ui.radarEl.classList.contains('hidden')) {
+        ui.radarTgl.textContent = 'View Radar Chart';
+      } else {
+        ui.radarTgl.textContent = 'Hide Radar Chart';
       }
     });
   }
