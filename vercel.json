@@ -1,7 +1,7 @@
 {
   "functions": {
-    "api/analyze.js": { "runtime": "nodejs" },
-    "api/health.js": { "runtime": "nodejs" },
+    "api/analyze.js": { "runtime": "nodejs22.x" },
+    "api/health.js": { "runtime": "nodejs22.x" },
     "scripts/warm-edge.js": { "runtime": "edge" }
   },
   "crons": [
