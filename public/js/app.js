@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修复正则表达式语法 */
+/* public/js/app.js  (ESM)  Final - 修正四维度分析 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -67,28 +67,37 @@ async function loadEmotionDict() {
   }
 }
 
-// 对立词典
-const binaryOppositionDict = [
-  "enemy", "traitor", "evil", "us", "we", "our", "ours", "us-vs-them", 
-  "them", "they", "their", "theirs", "opponent", "adversary", "rival",
-  "oppose", "against", "versus", "vs", "verses", "divide", "divided"
-];
+// 对立词典 - 从情感词典中自动识别
+function findOppositionPairs() {
+  const positiveWords = [];
+  const negativeWords = [];
+  
+  for (const [word, data] of Object.entries(enEmoDict)) {
+    if (data.polarity === "positive") {
+      positiveWords.push(word);
+    } else if (data.polarity === "negative") {
+      negativeWords.push(word);
+    }
+  }
+  
+  return { positiveWords, negativeWords };
+}
 
 // 意图动词词典
 const intentVerbs = [
-  "want", "plan", "aim", "intend", "seek", "decide", "think", "believe",
-  "feel", "know", "understand", "mean", "try", "attempt", "hope", "wish"
+  "think", "believe", "feel", "assume", "presume", "imagine", "guess", "suppose",
+  "wonder", "doubt", "suspect", "expect", "anticipate", "predict", "foresee"
 ];
 
 // 逻辑谬误模式
 const logicalFallacyPatterns = [
   { type: "slippery slope", regex: /\b(will lead to|inevitably lead|eventually result in|start down the path|begin the trend)\b/gi },
-  { type: "ad hominem", regex: /\b(idiot|liar|fool|stupid|moron|jerk|foolish|ignorant)\b/gi },
-  { type: "straw man", regex: /\b(they claim|they say|they argue)\s+.*\b(extreme|ridiculous|absurd|unreasonable)\b/gi },
-  { type: "false dilemma", regex: /\b(either.*or|only two options|black and white|no middle ground)\b/gi },
-  { type: "appeal to authority", regex: /\b(expert says|famous person said|authority figure claims)\b/gi },
-  { type: "hasty generalization", regex: /\b(all.*are|every.*is|never.*not|always.*will)\b/gi },
-  { type: "correlation implies causation", regex: /\b(therefore|so|caused by|because of)\b/gi }
+  { type: "ad hominem", regex: /\b(idiot|liar|fool|stupid|moron|jerk|foolish|ignorant|dumb|crazy)\b/gi },
+  { type: "straw man", regex: /\b(they claim|they say|they argue)\s+.*\b(extreme|ridiculous|absurd|unreasonable|crazy)\b/gi },
+  { type: "false dilemma", regex: /\b(either.*or|only two options|black and white|no middle ground|one or the other)\b/gi },
+  { type: "appeal to authority", regex: /\b(expert says|famous person said|authority figure claims|professor states)\b/gi },
+  { type: "hasty generalization", regex: /\b(all.*are|every.*is|never.*not|always.*will|everyone.*thinks)\b/gi },
+  { type: "correlation implies causation", regex: /\b(therefore|so|caused by|because of|leads to)\b/gi }
 ];
 
 // 启动词典加载
@@ -147,6 +156,8 @@ function detectBiasWithRules(content) {
     overallStance: 'neutral'
   };
   
+  console.log('开始检测偏见，内容句子数:', sentences.length);
+  
   // 情感词检测
   sentences.forEach(sentence => {
     const words = sentence.toLowerCase().match(/\b[\w']+\b/g) || [];
@@ -154,26 +165,36 @@ function detectBiasWithRules(content) {
     biasResults.emotionalWords += emotionalWords.length;
   });
   
-  // 二元对立检测
+  console.log('情感词检测结果:', biasResults.emotionalWords);
+  
+  // 二元对立检测 - 基于情感词典中的正负情感词
+  const { positiveWords, negativeWords } = findOppositionPairs();
   sentences.forEach(sentence => {
     const lowerSentence = sentence.toLowerCase();
-    let hasUs = false;
-    let hasThem = false;
+    let hasPositive = false;
+    let hasNegative = false;
     
-    // 检查"我们"类词汇
-    binaryOppositionDict.slice(0, 6).forEach(word => {
-      if (lowerSentence.includes(word)) hasUs = true;
-    });
+    // 检查是否同时出现正负情感词
+    for (const posWord of positiveWords) {
+      if (lowerSentence.includes(posWord)) {
+        hasPositive = true;
+        break;
+      }
+    }
     
-    // 检查"他们"类词汇
-    binaryOppositionDict.slice(7).forEach(word => {
-      if (lowerSentence.includes(word)) hasThem = true;
-    });
+    for (const negWord of negativeWords) {
+      if (lowerSentence.includes(negWord)) {
+        hasNegative = true;
+        break;
+      }
+    }
     
-    if (hasUs && hasThem) {
+    if (hasPositive && hasNegative) {
       biasResults.binaryOpposition++;
     }
   });
+  
+  console.log('二元对立检测结果:', biasResults.binaryOpposition);
   
   // 心理揣测检测
   sentences.forEach(sentence => {
@@ -187,6 +208,8 @@ function detectBiasWithRules(content) {
     }
   });
   
+  console.log('心理揣测检测结果:', biasResults.mindReading);
+  
   // 逻辑谬误检测
   sentences.forEach(sentence => {
     logicalFallacyPatterns.forEach(pattern => {
@@ -196,40 +219,134 @@ function detectBiasWithRules(content) {
     });
   });
   
-  // 总体立场检测
-  let totalScore = 0;
-  let sentenceCount = 0;
+  console.log('逻辑谬误检测结果:', biasResults.logicalFallacy);
+  
+  // 总体立场检测 - 基于情感词典的极性
+  let positiveCount = 0;
+  let negativeCount = 0;
+  let totalEmotionalWords = 0;
   
   sentences.forEach(sentence => {
     const words = sentence.toLowerCase().match(/\b[\w']+\b/g) || [];
-    let sentenceScore = 0;
-    let wordCount = 0;
-    
     words.forEach(word => {
       if (enEmoDict[word]) {
-        sentenceScore += enEmoDict[word].polarity;
-        wordCount++;
+        totalEmotionalWords++;
+        if (enEmoDict[word].polarity === "positive") {
+          positiveCount++;
+        } else if (enEmoDict[word].polarity === "negative") {
+          negativeCount++;
+        }
       }
     });
-    
-    if (wordCount > 0) {
-      totalScore += sentenceScore / wordCount;
-      sentenceCount++;
-    }
   });
   
-  if (sentenceCount > 0) {
-    const avgScore = totalScore / sentenceCount;
-    if (avgScore > 0.1) {
-      biasResults.overallStance = `leaning positive ${Math.min(100, Math.round(Math.abs(avgScore) * 100))}%`;
-    } else if (avgScore < -0.1) {
-      biasResults.overallStance = `leaning negative ${Math.min(100, Math.round(Math.abs(avgScore) * 100))}%`;
+  if (totalEmotionalWords > 0) {
+    const positiveRatio = positiveCount / totalEmotionalWords;
+    const negativeRatio = negativeCount / totalEmotionalWords;
+    
+    if (positiveRatio > negativeRatio + 0.1) {
+      biasResults.overallStance = `leaning positive ${Math.min(100, Math.round(positiveRatio * 100))}%`;
+    } else if (negativeRatio > positiveRatio + 0.1) {
+      biasResults.overallStance = `leaning negative ${Math.min(100, Math.round(negativeRatio * 100))}%`;
     } else {
       biasResults.overallStance = 'neutral';
     }
   }
   
+  console.log('总体立场检测结果:', biasResults.overallStance);
   return biasResults;
+}
+
+// 计算四维度 - 充分利用情感词典
+function calculateFourDimensions(content) {
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const words = content.toLowerCase().match(/\b[\w']+\b/g) || [];
+  
+  // 初始化四维度
+  const dimensions = { ts: 5, fd: 5, eb: 5, cs: 5 };
+  
+  // TS (Trustworthiness Score) - 可信度
+  // 基于情感强度：高强度情感词可能降低可信度
+  if (enEmoDictLoaded) {
+    const emotionalWords = words.filter(word => enEmoDict[word]);
+    if (emotionalWords.length > 0) {
+      const avgIntensity = emotionalWords.reduce((sum, word) => sum + enEmoDict[word].intensity, 0) / emotionalWords.length;
+      // 高强度情感词降低可信度
+      dimensions.ts = Math.max(1, 10 - avgIntensity);
+    } else {
+      dimensions.ts = 7; // 没有情感词反而更可信
+    }
+  }
+  
+  // FD (Factual Density) - 事实密度
+  // 基于情感词比例：情感词越少，事实密度越高
+  if (enEmoDictLoaded) {
+    const emotionalWordCount = words.filter(word => enEmoDict[word]).length;
+    const factualDensity = (words.length - emotionalWordCount) / Math.max(1, words.length);
+    dimensions.fd = factualDensity * 10;
+  }
+  
+  // EB (Emotional Balance) - 情感平衡
+  // 基于正负情感词平衡：越平衡分数越高
+  if (enEmoDictLoaded) {
+    let positiveCount = 0;
+    let negativeCount = 0;
+    
+    words.forEach(word => {
+      if (enEmoDict[word]) {
+        if (enEmoDict[word].polarity === "positive") positiveCount++;
+        else if (enEmoDict[word].polarity === "negative") negativeCount++;
+      }
+    });
+    
+    const totalEmotional = positiveCount + negativeCount;
+    if (totalEmotional > 0) {
+      const balance = 1 - Math.abs(positiveCount - negativeCount) / totalEmotional;
+      dimensions.eb = balance * 10;
+    } else {
+      dimensions.eb = 10; // 没有情感词最平衡
+    }
+  }
+  
+  // CS (Consistency Score) - 一致性
+  // 基于段落间情感倾向的一致性
+  if (enEmoDictLoaded && sentences.length > 1) {
+    const paragraphScores = [];
+    
+    for (const sentence of sentences) {
+      const sentWords = sentence.toLowerCase().match(/\b[\w']+\b/g) || [];
+      let posCount = 0;
+      let negCount = 0;
+      
+      sentWords.forEach(word => {
+        if (enEmoDict[word]) {
+          if (enEmoDict[word].polarity === "positive") posCount++;
+          else if (enEmoDict[word].polarity === "negative") negCount++;
+        }
+      });
+      
+      const total = posCount + negCount;
+      if (total > 0) {
+        paragraphScores.push((posCount - negCount) / total);
+      }
+    }
+    
+    if (paragraphScores.length > 1) {
+      // 计算段落间情感倾向的差异
+      let variance = 0;
+      if (paragraphScores.length > 0) {
+        const avg = paragraphScores.reduce((a, b) => a + b, 0) / paragraphScores.length;
+        const squaredDiffs = paragraphScores.map(score => Math.pow(score - avg, 2));
+        variance = squaredDiffs.reduce((a, b) => a + b, 0) / paragraphScores.length;
+      }
+      
+      // 差异越小，一致性越高
+      dimensions.cs = Math.max(1, 10 - variance * 50);
+    }
+  }
+  
+  console.log('四维度计算结果:', dimensions);
+  return dimensions;
 }
 
 // 解析API返回的结果 - 使用基于词典的偏见检测
@@ -302,23 +419,18 @@ function parseResult(resultText) {
       // 使用基于词典的偏见检测
       const biasResults = detectBiasWithRules(parsed.summary || resultText);
       
-      // 格式化偏见结果
+      // 格式化偏见结果 - 确保所有指标都显示，即使为0
       const biasComponents = [];
-      if (biasResults.emotionalWords > 0) {
-        biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
-      }
-      if (biasResults.binaryOpposition > 0) {
-        biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
-      }
-      if (biasResults.mindReading > 0) {
-        biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
-      }
-      if (biasResults.logicalFallacy > 0) {
-        biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
-      }
+      biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
+      biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
+      biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
+      biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
       biasComponents.push(`Overall stance: ${biasResults.overallStance}`);
       
       parsed.bias = biasComponents;
+      
+      // 计算四维度
+      parsed.dimensions = calculateFourDimensions(parsed.summary || resultText);
 
     } else {
       // 处理自然语言格式
@@ -402,32 +514,19 @@ function parseResult(resultText) {
       // 使用基于词典的偏见检测
       const biasResults = detectBiasWithRules(parsed.summary || resultText);
       
-      // 格式化偏见结果
+      // 格式化偏见结果 - 确保所有指标都显示，即使为0
       const biasComponents = [];
-      if (biasResults.emotionalWords > 0) {
-        biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
-      }
-      if (biasResults.binaryOpposition > 0) {
-        biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
-      }
-      if (biasResults.mindReading > 0) {
-        biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
-      }
-      if (biasResults.logicalFallacy > 0) {
-        biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
-      }
+      biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
+      biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
+      biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
+      biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
       biasComponents.push(`Overall stance: ${biasResults.overallStance}`);
       
       parsed.bias = biasComponents;
+      
+      // 计算四维度
+      parsed.dimensions = calculateFourDimensions(parsed.summary || resultText);
     }
-
-    // 设置四维度 - 确保雷达图数据有效
-    parsed.dimensions = {
-      ts: parsed.credibility || 5,
-      fd: Math.min(10, parsed.facts.length * 2) || 5, // 根据事实数量调整
-      eb: parsed.credibility >= 7 ? 8 : (parsed.credibility <= 3 ? 3 : 5), // 根据可信度调整情感中性
-      cs: 5 // 一致性需要更复杂的逻辑
-    };
 
     console.log('解析完成:', parsed);
     return parsed;
@@ -467,7 +566,7 @@ function createRadarChart(dimensions) {
   radarChart = new Chart(ui.radarEl, {
     type: 'radar',
     data: {
-      labels: ['Source Credibility', 'Fact Density', 'Emotional Neutrality', 'Consistency'],
+      labels: ['Source Credibility', 'Fact Density', 'Emotional Balance', 'Consistency'],
       datasets: [{
         label: 'Analysis Score',
         data: chartData,
