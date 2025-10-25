@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Debug API Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 5px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Debug API Test</h1>
+  
+  <div class="section">
+    <h3>Test API Endpoints</h3>
+    <button id="testAnalyze">Test /api/analyze</button>
+    <button id="testHealth">Test /api/health</button>
+    <button id="testChat">Test /api/chat</button>
+    <div id="result"></div>
+  </div>
+
+  <div class="section">
+    <h3>Test Content</h3>
+    <textarea id="testContent" rows="5" cols="80" placeholder="Enter test content here...">This is a test article about artificial intelligence. AI has become an important technology in recent years. Many experts believe it will revolutionize various industries.</textarea>
+    <br>
+    <input type="text" id="testTitle" value="Test Article" placeholder="Enter title">
+  </div>
+
+  <script>
+    const resultDiv = document.getElementById('result');
+    
+    function log(message) {
+      const p = document.createElement('p');
+      p.textContent = `[${new Date().toISOString()}] ${message}`;
+      resultDiv.appendChild(p);
+      resultDiv.scrollTop = resultDiv.scrollHeight;
+    }
+
+    document.getElementById('testAnalyze').addEventListener('click', async () => {
+      log('Testing /api/analyze...');
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            content: document.getElementById('testContent').value,
+            title: document.getElementById('testTitle').value
+          })
+        });
+        
+        log(`Response status: ${response.status}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          log(`Error: ${errorText}`);
+        } else {
+          const data = await response.json();
+          log('Success! Response data:');
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(data, null, 2);
+          resultDiv.appendChild(pre);
+        }
+      } catch (error) {
+        log(`Fetch error: ${error.message}`);
+        console.error('Test error:', error);
+      }
+    });
+
+    document.getElementById('testHealth').addEventListener('click', async () => {
+      log('Testing /api/health...');
+      try {
+        const response = await fetch('/api/health');
+        log(`Health check status: ${response.status}`);
+        if (response.ok) {
+          const data = await response.json();
+          log('Health data:');
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(data, null, 2);
+          resultDiv.appendChild(pre);
+        } else {
+          const errorText = await response.text();
+          log(`Health check error: ${errorText}`);
+        }
+      } catch (error) {
+        log(`Health check error: ${error.message}`);
+      }
+    });
+
+    document.getElementById('testChat').addEventListener('click', async () => {
+      log('Testing /api/chat...');
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            content: document.getElementById('testContent').value,
+            title: document.getElementById('testTitle').value
+          })
+        });
+        
+        log(`Chat API status: ${response.status}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          log(`Chat API error: ${errorText}`);
+        } else {
+          const data = await response.json();
+          log('Chat API success! Response data:');
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(data, null, 2);
+          resultDiv.appendChild(pre);
+        }
+      } catch (error) {
+        log(`Chat API error: ${error.message}`);
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+
