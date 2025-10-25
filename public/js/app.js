@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修正API调用逻辑 */
+/* public/js/app.js  (ESM)  Final - 修正API调用 - 只发送原始文本 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
