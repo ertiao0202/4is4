@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 使用新API端点 */
+/* public/js/app.js  (ESM)  Final - 修复情感词典加载 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -40,21 +40,39 @@ async function setCache(content, title, report) {
   if (LRU.size > 2000) LRU.delete(LRU.keys().next().value); 
 }
 
-/* 英文词典校正 */
-let enEmoDict = {}; 
-fetch('/dict/en-emotionDict.json')
-  .then(r => r.json())
-  .then(d => {
-    enEmoDict = d.reduce((acc, item) => {
+/* 英文词典校正 - 异步加载，不阻塞其他功能 */
+let enEmoDict = {};
+let enEmoDictLoaded = false;
+
+// 异步加载情感词典，不阻塞页面初始化
+async function loadEmotionDict() {
+  try {
+    const response = await fetch('/dict/en-emotionDict.json');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    
+    enEmoDict = data.reduce((acc, item) => {
       acc[item.word] = { intensity: item.intensity, polarity: item.polarity };
       return acc;
     }, {});
+    
     console.log('情感词典加载完成，共', Object.keys(enEmoDict).length, '个词条');
-  })
-  .catch(err => console.error('情感词典加载失败:', err));
+    enEmoDictLoaded = true;
+  } catch (err) {
+    console.error('情感词典加载失败:', err);
+    // 即使词典加载失败，也要继续运行，只是不使用情感分析功能
+    enEmoDictLoaded = false;
+  }
+}
+
+// 启动词典加载
+loadEmotionDict();
 
 function correctEmotionEN(rawEmo, text) { 
-  if (!text || !enEmoDict) return rawEmo; 
+  // 如果词典未加载完成，直接返回原始值
+  if (!enEmoDictLoaded || !text) return rawEmo; 
   const tokens = text.toLowerCase().match(/\b[\w']+\b/g) || []; 
   let maxPhrase = 0; 
   for (let n = 1; n <= 3; n++) { 
