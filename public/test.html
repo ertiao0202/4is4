@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Test Page</h1>
+    <p>If you can see this page, basic deployment is working.</p>
+    <p>Testing API endpoints...</p>
+    
+    <script>
+        // 测试API端点
+        fetch('/api/edge-test')
+            .then(response => response.json())
+            .then(data => {
+                document.body.innerHTML += '<p>Edge API test: Success!</p>';
+                document.body.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                document.body.innerHTML += '<p>Edge API test: Failed - ' + error.message + '</p>';
+            });
+    </script>
+</body>
+</html>
+
+
+
