@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 恢复原始样式 */
+/* public/js/app.js  (ESM)  Final - 增强解析函数 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -112,7 +112,7 @@ async function fetchContent(input) {
   }
 }
 
-// 解析API返回的结果 - 修复版本，能正确处理KIMI API格式
+// 解析API返回的结果 - 增强版本，能处理多种格式
 function parseResult(resultText) {
   try {
     console.log('开始解析结果:', resultText);
@@ -135,75 +135,134 @@ function parseResult(resultText) {
       return parsed;
     }
 
-    // 解析可信度 - 支持两种格式
-    let credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)\/10/i);
-    if (!credibilityMatch) {
-      credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)/i);
-    }
-    if (credibilityMatch) {
-      parsed.credibility = parseFloat(credibilityMatch[1]);
-    }
-
-    // 解析事实 - 支持新旧格式
-    const factsMatches = resultText.match(/<fact>(.*?)<\/fact>/gi);
-    if (factsMatches) {
-      parsed.facts = factsMatches.map(fact => fact.replace(/<\/?fact>/gi, '').trim());
-    }
-
-    // 解析观点 - 支持新旧格式
-    const opinionsMatches = resultText.match(/<opinion>(.*?)<\/opinion>/gi);
-    if (opinionsMatches) {
-      parsed.opinions = opinionsMatches.map(op => op.replace(/<\/?opinion>/gi, '').trim());
-    }
-
-    // 解析偏见
-    const biasMatches = resultText.match(/Bias:.*?(?=\n\n|$)/i);
-    if (biasMatches) {
-      parsed.bias = biasMatches;
-    }
-
-    // 解析发布商建议
-    const pubMatch = resultText.match(/Pub:\s*(.*?)(?=\nPR:|$)/i);
-    if (pubMatch) {
-      parsed.publisherAdvice = pubMatch[1].trim();
-    }
-
-    // 解析公关回复
-    const prMatch = resultText.match(/PR:\s*(.*?)(?=\nSum:|$)/i);
-    if (prMatch) {
-      parsed.prReply = prMatch[1].trim();
-    }
-
-    // 解析总结 - 如果API直接返回了总结部分
-    const sumMatch = resultText.match(/Sum:\s*(.*?)(?=\n|$)/i);
-    if (sumMatch) {
-      parsed.summary = sumMatch[1].trim();
-    } else {
-      // 尝试从结果中提取第一行作为总结
-      const lines = resultText.split('\n');
-      const summaryLine = lines.find(line => !line.includes('Title:') && 
-                                              !line.includes('Credibility:') && 
-                                              !line.includes('Facts:') && 
-                                              !line.includes('Opinions:') && 
-                                              !line.includes('Bias:') && 
-                                              !line.includes('Pub:') && 
-                                              !line.includes('PR:') && 
-                                              line.trim().length > 0);
-      parsed.summary = summaryLine ? summaryLine : resultText.substring(0, 200) + '...';
-    }
-
-    // 解析四维度（如果API返回这些信息）
-    const tsMatch = resultText.match(/Source Credibility:\s*(\d+(?:\.\d+)?)/i);
-    const fdMatch = resultText.match(/Fact Density:\s*(\d+(?:\.\d+)?)/i);
-    const ebMatch = resultText.match(/Emotional Neutrality:\s*(\d+(?:\.\d+)?)/i);
-    const csMatch = resultText.match(/Consistency:\s*(\d+(?:\.\d+)?)/i);
+    // 尝试解析标准格式（包含Credibility、Facts、Opinions等标签）
+    const standardFormat = resultText.includes('Credibility:') && 
+                          (resultText.includes('<fact>') || resultText.includes('<opinion>'));
     
-    parsed.dimensions = {
-      ts: tsMatch ? parseFloat(tsMatch[1]) : (parsed.credibility || 5),
-      fd: fdMatch ? parseFloat(fdMatch[1]) : 5,
-      eb: ebMatch ? parseFloat(ebMatch[1]) : 5,
-      cs: csMatch ? parseFloat(csMatch[1]) : 5
-    };
+    if (standardFormat) {
+      // 解析可信度 - 支持两种格式
+      let credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)\/10/i);
+      if (!credibilityMatch) {
+        credibilityMatch = resultText.match(/Credibility:\s*(\d+(?:\.\d+)?)/i);
+      }
+      if (credibilityMatch) {
+        parsed.credibility = parseFloat(credibilityMatch[1]);
+      }
+
+      // 解析事实 - 支持新旧格式
+      const factsMatches = resultText.match(/<fact>(.*?)<\/fact>/gi);
+      if (factsMatches) {
+        parsed.facts = factsMatches.map(fact => fact.replace(/<\/?fact>/gi, '').trim());
+      }
+
+      // 解析观点 - 支持新旧格式
+      const opinionsMatches = resultText.match(/<opinion>(.*?)<\/opinion>/gi);
+      if (opinionsMatches) {
+        parsed.opinions = opinionsMatches.map(op => op.replace(/<\/?opinion>/gi, '').trim());
+      }
+
+      // 解析偏见
+      const biasMatches = resultText.match(/Bias:.*?(?=\n\n|$)/i);
+      if (biasMatches) {
+        parsed.bias = biasMatches;
+      }
+
+      // 解析发布商建议
+      const pubMatch = resultText.match(/Pub:\s*(.*?)(?=\nPR:|$)/i);
+      if (pubMatch) {
+        parsed.publisherAdvice = pubMatch[1].trim();
+      }
+
+      // 解析公关回复
+      const prMatch = resultText.match(/PR:\s*(.*?)(?=\nSum:|$)/i);
+      if (prMatch) {
+        parsed.prReply = prMatch[1].trim();
+      }
+
+      // 解析总结 - 如果API直接返回了总结部分
+      const sumMatch = resultText.match(/Sum:\s*(.*?)(?=\n|$)/i);
+      if (sumMatch) {
+        parsed.summary = sumMatch[1].trim();
+      } else {
+        // 尝试从结果中提取第一行作为总结
+        const lines = resultText.split('\n');
+        const summaryLine = lines.find(line => !line.includes('Title:') && 
+                                                !line.includes('Credibility:') && 
+                                                !line.includes('Facts:') && 
+                                                !line.includes('Opinions:') && 
+                                                !line.includes('Bias:') && 
+                                                !line.includes('Pub:') && 
+                                                !line.includes('PR:') && 
+                                                line.trim().length > 0);
+        parsed.summary = summaryLine ? summaryLine : resultText.substring(0, 200) + '...';
+      }
+
+      // 解析四维度（如果API返回这些信息）
+      const tsMatch = resultText.match(/Source Credibility:\s*(\d+(?:\.\d+)?)/i);
+      const fdMatch = resultText.match(/Fact Density:\s*(\d+(?:\.\d+)?)/i);
+      const ebMatch = resultText.match(/Emotional Neutrality:\s*(\d+(?:\.\d+)?)/i);
+      const csMatch = resultText.match(/Consistency:\s*(\d+(?:\.\d+)?)/i);
+      
+      parsed.dimensions = {
+        ts: tsMatch ? parseFloat(tsMatch[1]) : (parsed.credibility || 5),
+        fd: fdMatch ? parseFloat(fdMatch[1]) : 5,
+        eb: ebMatch ? parseFloat(ebMatch[1]) : 5,
+        cs: csMatch ? parseFloat(csMatch[1]) : 5
+      };
+    } else {
+      // 如果不是标准格式，尝试从自然语言文本中提取信息
+      console.log('检测到非标准格式，尝试提取关键信息...');
+      
+      // 尝试从自然语言中提取可信度
+      const credMatch = resultText.match(/credibility.*?(\d+(?:\.\d+)?)/i);
+      if (credMatch) {
+        parsed.credibility = parseFloat(credMatch[1]);
+      } else {
+        // 根据文本特征估计可信度
+        if (resultText.toLowerCase().includes('strongly negative') || 
+            resultText.toLowerCase().includes('strong language') ||
+            resultText.toLowerCase().includes('opinion')) {
+          parsed.credibility = 4; // 低可信度
+        } else if (resultText.toLowerCase().includes('report') || 
+                   resultText.toLowerCase().includes('data') ||
+                   resultText.toLowerCase().includes('study')) {
+          parsed.credibility = 7; // 高可信度
+        } else {
+          parsed.credibility = 5; // 中等可信度
+        }
+      }
+      
+      // 尝试提取事实和观点
+      const lines = resultText.split('\n');
+      for (const line of lines) {
+        if (line.toLowerCase().includes('fact') && !line.toLowerCase().includes('opinion')) {
+          parsed.facts.push(line);
+        } else if (line.toLowerCase().includes('opinion')) {
+          parsed.opinions.push(line);
+        }
+      }
+      
+      // 如果没有提取到事实和观点，使用整个文本作为总结
+      if (parsed.facts.length === 0 && parsed.opinions.length === 0) {
+        parsed.summary = resultText.substring(0, 300) + '...';
+        
+        // 尝试从文本中提取关键信息
+        if (resultText.toLowerCase().includes('negative') || 
+            resultText.toLowerCase().includes('bias')) {
+          parsed.bias.push('Detected negative sentiment');
+        }
+      } else {
+        parsed.summary = `Analysis completed. Found ${parsed.facts.length} facts and ${parsed.opinions.length} opinions.`;
+      }
+      
+      // 设置默认维度值
+      parsed.dimensions = {
+        ts: parsed.credibility,
+        fd: 5,
+        eb: 5,
+        cs: 5
+      };
+    }
 
     console.log('解析完成:', parsed);
     return parsed;
