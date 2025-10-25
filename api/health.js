@@ -1,18 +1,12 @@
-// api/health.js  Node.js Runtime - 健康检查
-export const runtime = 'nodejs';
-
+// api/health.js - 传统API路由格式
 export default async function handler(req, res) {
   const hasApiKey = !!process.env.OPENAI_API_KEY;
   
-  return new Response(JSON.stringify({ 
+  res.status(200).json({ 
     status: 'healthy',
     timestamp: new Date().toISOString(),
     hasApiKey: hasApiKey,
     message: hasApiKey ? 'API key is configured' : 'API key is missing - please set OPENAI_API_KEY in environment variables'
-  }), { 
-    headers: { 
-      'content-type': 'application/json' 
-    } 
   });
 }
 
