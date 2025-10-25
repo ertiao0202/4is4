@@ -1,40 +1,58 @@
-// api/analyze.js  Node.js Runtime - 模拟版
-export const runtime = 'nodejs';
-
-export default async function handler(req) {
+// api/analyze.js - 传统API路由格式
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // 检查API密钥
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Missing OPENAI_API_KEY environment variable' });
   }
 
   try {
-    const body = await req.json();
-    const { content, title } = body;
+    const { content, title } = req.body;
     
     if (!content || !title) {
-      return new Response('content or title empty', { status: 400 });
+      return res.status(400).json({ error: 'content or title empty' });
     }
 
-    // 模拟API延迟
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // 返回模拟结果
-    const mockResponse = {
-      choices: [{
-        message: {
-          content: `Summary: This is a sample analysis of the provided content. The text discusses various aspects of the topic with mixed sentiment and moderate bias.\n\nFacts: 1. <fact>The content mentions specific details about the topic</fact> 2. <fact>There are measurable aspects mentioned in the text</fact>\n\nOpinions: 1. <opinion>The author expresses a particular viewpoint on the subject</opinion> 2. <opinion>There are subjective assessments made in the text</opinion>\n\nBias: -E:Neutral -B:Negative -M:Medium -F:Factual -Stance:slightly leaning 30%\n\nPub: The publisher should provide more balanced perspectives and verify claims. PR: Consider addressing concerns raised and providing additional context.\n\nCredibility:7.5/10\nSource Credibility:8.0/10\nFact Density:7.0/10\nEmotional Neutrality:6.5/10\nConsistency:8.5/10`
-        }
-      }]
-    };
+    // 使用fetch直接调用OpenAI API
+    const prompt = `FactLens-EN-v2
+Title:${title}
+Credibility:X/10
+Facts:1.conf:0.XX<fact>sentence</fact>
+Opinions:1.conf:0.XX<opinion>sentence</opinion>
+Bias:-E:N conf:0.XX -B:N -M:N -F:N -Stance:neutral/leaning X%
+Pub:xxx(≤15w) PR:xxx(≤8w) Sum:xxx(≤8w)
+Text:${content}`.trim();
 
-    return new Response(JSON.stringify(mockResponse), { 
-      headers: { 
-        'content-type': 'application/json',
-        'X-Cache': 'MISS' 
-      } 
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: 600,
+      }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('OpenAI API Error:', errorData);
+      return res.status(response.status).json({ error: errorData });
+    }
+
+    const data = await response.json();
+    
+    res.status(200).json(data);
   } catch (e) {
-    console.error('处理请求时出错:', e);
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    console.error('API Error:', e);
+    res.status(500).json({ error: e.message });
   }
 }
 
