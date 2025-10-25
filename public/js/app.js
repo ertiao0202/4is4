@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修复API端点 */
+/* public/js/app.js  (ESM)  Final - 基于词典规则的偏见检测 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -40,11 +40,11 @@ async function setCache(content, title, report) {
   if (LRU.size > 2000) LRU.delete(LRU.keys().next().value); 
 }
 
-/* 英文词典校正 - 异步加载，不阻塞其他功能 */
+/* ===== 偏见检测词典和规则 ===== */
 let enEmoDict = {};
 let enEmoDictLoaded = false;
 
-// 异步加载情感词典，不阻塞页面初始化
+// 异步加载情感词典
 async function loadEmotionDict() {
   try {
     const response = await fetch('/dict/en-emotionDict.json');
@@ -54,7 +54,7 @@ async function loadEmotionDict() {
     const data = await response.json();
     
     enEmoDict = data.reduce((acc, item) => {
-      acc[item.word] = { intensity: item.intensity, polarity: item.polarity };
+      acc[item.word.toLowerCase()] = { intensity: item.intensity, polarity: item.polarity };
       return acc;
     }, {});
     
@@ -66,6 +66,30 @@ async function loadEmotionDict() {
     enEmoDictLoaded = false;
   }
 }
+
+// 对立词典
+const binaryOppositionDict = [
+  "enemy", "traitor", "evil", "us", "we", "our", "ours", "us-vs-them", 
+  "them", "they", "their", "theirs", "opponent", "adversary", "rival",
+  "oppose", "against", "versus", "vs", "verses", "divide", "divided"
+];
+
+// 意图动词词典
+const intentVerbs = [
+  "want", "plan", "aim", "intend", "seek", "decide", "think", "believe",
+  "feel", "know", "understand", "mean", "try", "attempt", "hope", "wish"
+];
+
+// 逻辑谬误模式
+const logicalFallacyPatterns = [
+  { type: "slippery slope", regex: /\b(will lead to|inevitably lead|eventually result in|start down the path|begin the trend)\b/gi },
+  { type: "ad hominem", regex: /\b(idiot|liar|fool|stupid|moron|jerk|foolish|ignorant)\b/gi },
+  { type: "straw man", regex /\b(they claim|they say|they argue)\s+.*\b(extreme|ridiculous|absurd|unreasonable)\b/gi },
+  { type: "false dilemma", regex: /\b(either.*or|only two options|black and white|no middle ground)\b/gi },
+  { type: "appeal to authority", regex: /\b(expert says|famous person said|authority figure claims)\b/gi },
+  { type: "hasty generalization", regex: /\b(all.*are|every.*is|never.*not|always.*will)\b/gi },
+  { type: "correlation implies causation", regex: /\b(therefore|so|caused by|because of)\b/gi }
+];
 
 // 启动词典加载
 loadEmotionDict();
@@ -112,7 +136,103 @@ async function fetchContent(input) {
   }
 }
 
-// 解析API返回的结果 - 修复偏见维度解析
+// 基于词典和规则的偏见检测
+function detectBiasWithRules(content) {
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const biasResults = {
+    emotionalWords: 0,
+    binaryOpposition: 0,
+    mindReading: 0,
+    logicalFallacy: 0,
+    overallStance: 'neutral'
+  };
+  
+  // 情感词检测
+  sentences.forEach(sentence => {
+    const words = sentence.toLowerCase().match(/\b[\w']+\b/g) || [];
+    const emotionalWords = words.filter(word => enEmoDict[word]);
+    biasResults.emotionalWords += emotionalWords.length;
+  });
+  
+  // 二元对立检测
+  sentences.forEach(sentence => {
+    const lowerSentence = sentence.toLowerCase();
+    let hasUs = false;
+    let hasThem = false;
+    
+    // 检查"我们"类词汇
+    binaryOppositionDict.slice(0, 6).forEach(word => {
+      if (lowerSentence.includes(word)) hasUs = true;
+    });
+    
+    // 检查"他们"类词汇
+    binaryOppositionDict.slice(7).forEach(word => {
+      if (lowerSentence.includes(word)) hasThem = true;
+    });
+    
+    if (hasUs && hasThem) {
+      biasResults.binaryOpposition++;
+    }
+  });
+  
+  // 心理揣测检测
+  sentences.forEach(sentence => {
+    const lowerSentence = sentence.toLowerCase();
+    const mindReadingPattern = new RegExp(
+      `\\b(they|he|she|the government|people|someone|anyone)\\s+.*\\b(${intentVerbs.join('|')})\\b`,
+      'i'
+    );
+    if (mindReadingPattern.test(lowerSentence)) {
+      biasResults.mindReading++;
+    }
+  });
+  
+  // 逻辑谬误检测
+  sentences.forEach(sentence => {
+    logicalFallacyPatterns.forEach(pattern => {
+      if (pattern.regex.test(sentence)) {
+        biasResults.logicalFallacy++;
+      }
+    });
+  });
+  
+  // 总体立场检测
+  let totalScore = 0;
+  let sentenceCount = 0;
+  
+  sentences.forEach(sentence => {
+    const words = sentence.toLowerCase().match(/\b[\w']+\b/g) || [];
+    let sentenceScore = 0;
+    let wordCount = 0;
+    
+    words.forEach(word => {
+      if (enEmoDict[word]) {
+        sentenceScore += enEmoDict[word].polarity;
+        wordCount++;
+      }
+    });
+    
+    if (wordCount > 0) {
+      totalScore += sentenceScore / wordCount;
+      sentenceCount++;
+    }
+  });
+  
+  if (sentenceCount > 0) {
+    const avgScore = totalScore / sentenceCount;
+    if (avgScore > 0.1) {
+      biasResults.overallStance = `leaning positive ${Math.min(100, Math.round(Math.abs(avgScore) * 100))}%`;
+    } else if (avgScore < -0.1) {
+      biasResults.overallStance = `leaning negative ${Math.min(100, Math.round(Math.abs(avgScore) * 100))}%`;
+    } else {
+      biasResults.overallStance = 'neutral';
+    }
+  }
+  
+  return biasResults;
+}
+
+// 解析API返回的结果 - 使用基于词典的偏见检测
 function parseResult(resultText) {
   try {
     console.log('开始解析结果:', resultText);
@@ -167,63 +287,6 @@ function parseResult(resultText) {
         });
       }
 
-      // 解析偏见 - 专门处理偏见的五个维度格式
-      const biasMatch = resultText.match(/Bias:\s*(.*?)(?=\n\n|$|\nPub:)/);
-      if (biasMatch) {
-        const biasText = biasMatch[1].trim();
-        
-        // 解析偏见的五个维度
-        const biasComponents = [];
-        
-        // 1. Emotional words (bias.emotional) - 攻击/贬义情感词数量
-        const emotionalMatch = biasText.match(/-E:N\s+conf:\s*(\d+\.?\d+)/);
-        if (emotionalMatch) {
-          biasComponents.push(`Emotional words: ${emotionalMatch[1]} (Attack/derogatory emotional words count)`);
-        }
-        
-        // 2. Binary opposition (bias.binary) - 敌对标签数量
-        const binaryMatch = biasText.match(/-B:N/);
-        if (binaryMatch) {
-          biasComponents.push('Binary opposition: Present (Hostile labels count)');
-        }
-        
-        // 3. Mind-reading (bias.mind) - 揣测动机数量
-        const mindMatch = biasText.match(/-M:N/);
-        if (mindMatch) {
-          biasComponents.push('Mind-reading: Present (Assuming motives/intents count)');
-        }
-        
-        // 4. Logical fallacy (bias.fallacy) - 逻辑谬误数量
-        const fallacyMatch = biasText.match(/-F:N/);
-        if (fallacyMatch) {
-          biasComponents.push('Logical fallacy: Present (Classic fallacies count)');
-        }
-        
-        // 5. Overall stance (bias.stance) - 总体立场
-        const stanceMatch = biasText.match(/-Stance:([^-\n]+)/);
-        if (stanceMatch) {
-          const stance = stanceMatch[1].trim();
-          biasComponents.push(`Overall stance: ${stance} (neutral/leaning/critical + percentage)`);
-        }
-        
-        if (biasComponents.length > 0) {
-          parsed.bias = biasComponents;
-        } else {
-          parsed.bias = [biasText];
-        }
-      }
-
-      // 解析发布商建议和PR回复
-      const pubMatch = resultText.match(/Pub:\s*(.*?)(?=\nPR:|$)/i);
-      if (pubMatch) {
-        parsed.publisherAdvice = pubMatch[1].replace(/\(≤\d+w\)/g, '').trim();
-      }
-      
-      const prMatch = resultText.match(/PR:\s*(.*?)(?=\nSum:|$)/i);
-      if (prMatch) {
-        parsed.prReply = prMatch[1].replace(/\(≤\d+w\)/g, '').trim();
-      }
-
       // 解析摘要
       const sumMatch = resultText.match(/Sum:\s*(.*?)(?=\n|$)/i);
       if (sumMatch) {
@@ -236,53 +299,32 @@ function parseResult(resultText) {
         }
       }
 
+      // 使用基于词典的偏见检测
+      const biasResults = detectBiasWithRules(parsed.summary || resultText);
+      
+      // 格式化偏见结果
+      const biasComponents = [];
+      if (biasResults.emotionalWords > 0) {
+        biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
+      }
+      if (biasResults.binaryOpposition > 0) {
+        biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
+      }
+      if (biasResults.mindReading > 0) {
+        biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
+      }
+      if (biasResults.logicalFallacy > 0) {
+        biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
+      }
+      biasComponents.push(`Overall stance: ${biasResults.overallStance}`);
+      
+      parsed.bias = biasComponents;
+
     } else {
-      // 处理自然语言格式（KIMI的解释性回复）
+      // 处理自然语言格式
       console.log('检测到自然语言格式');
       
-      // 先检查是否包含偏见指标格式
-      const biasPattern = /-E:N\s+conf:\s*\d+\.?\d+\s+-B:N\s+-M:N\s+-F:N\s+-Stance:[^-\n]+/;
-      if (biasPattern.test(resultText)) {
-        console.log('检测到偏见指标格式');
-        // 提取偏见指标
-        const biasText = resultText.match(biasPattern)?.[0];
-        if (biasText) {
-          const biasComponents = [];
-          
-          // 解析偏见的五个维度
-          const eMatch = biasText.match(/-E:N\s+conf:\s*(\d+\.?\d+)/);
-          if (eMatch) {
-            biasComponents.push(`Emotional words: ${eMatch[1]} (Attack/derogatory emotional words count)`);
-          }
-          
-          const bMatch = biasText.match(/-B:N/);
-          if (bMatch) {
-            biasComponents.push('Binary opposition: Present (Hostile labels count)');
-          }
-          
-          const mMatch = biasText.match(/-M:N/);
-          if (mMatch) {
-            biasComponents.push('Mind-reading: Present (Assuming motives/intents count)');
-          }
-          
-          const fMatch = biasText.match(/-F:N/);
-          if (fMatch) {
-            biasComponents.push('Logical fallacy: Present (Classic fallacies count)');
-          }
-          
-          const stanceMatch = biasText.match(/-Stance:([^-\n]+)/);
-          if (stanceMatch) {
-            const stance = stanceMatch[1].trim();
-            biasComponents.push(`Overall stance: ${stance} (neutral/leaning/critical + percentage)`);
-          }
-          
-          if (biasComponents.length > 0) {
-            parsed.bias = biasComponents;
-          }
-        }
-      }
-      
-      // 从文本中提取其他信息
+      // 提取文本内容
       const lines = resultText.split('\n');
       
       // 尝试提取可信度
@@ -323,17 +365,6 @@ function parseResult(resultText) {
         }
       }
       
-      // 如果上面没提取到事实，尝试从文本中找可能的事实陈述
-      if (parsed.facts.length === 0) {
-        const deviceClaims = resultText.toLowerCase().match(/the (device|product).*?(?=\.\s|$)/g);
-        if (deviceClaims) {
-          parsed.facts = deviceClaims.map(claim => ({
-            content: claim.charAt(0).toUpperCase() + claim.slice(1),
-            confidence: 0.5
-          }));
-        }
-      }
-
       // 提取观点
       const opinionKeywords = ['opinion', 'view', 'believe', 'think', 'appears', 'seems'];
       for (const line of lines) {
@@ -345,30 +376,7 @@ function parseResult(resultText) {
         }
       }
       
-      // 如果上面没提取到观点，尝试从文本中找观点表述
-      if (parsed.opinions.length === 0) {
-        const opinionPhrases = resultText.toLowerCase().match(/(it is|the text|this review).*?(is|appears|seems|looks).*?(?=\.\s|$)/g);
-        if (opinionPhrases) {
-          parsed.opinions = opinionPhrases.map(op => ({
-            content: op.charAt(0).toUpperCase() + op.slice(1),
-            confidence: 0.6
-          }));
-        }
-      }
-
-      // 如果偏见还没解析到，尝试从文本中提取
-      if (parsed.bias.length === 0) {
-        if (resultText.toLowerCase().includes('bias') || 
-            resultText.toLowerCase().includes('negative') ||
-            resultText.toLowerCase().includes('positive')) {
-          parsed.bias = [resultText.match(/(bias is|bias.*?negative|bias.*?positive)/gi)?.[0] || 'Detected bias in review'];
-        } else if (resultText.toLowerCase().includes('strong language') || 
-                   resultText.toLowerCase().includes('emotional')) {
-          parsed.bias = ['Detected emotional language'];
-        }
-      }
-
-      // 提取摘要 - 使用文本的总结部分
+      // 提取摘要
       const summaryPhrases = ['based on this analysis', 'in summary', 'conclusion', 'important to approach'];
       for (const line of lines) {
         if (summaryPhrases.some(phrase => line.toLowerCase().includes(phrase))) {
@@ -377,7 +385,6 @@ function parseResult(resultText) {
         }
       }
       
-      // 如果没有找到总结，使用最后一段有意义的内容
       if (!parsed.summary) {
         const meaningfulLines = lines.filter(line => 
           line.length > 50 && 
@@ -391,9 +398,30 @@ function parseResult(resultText) {
           parsed.summary = 'Analysis completed based on provided text.';
         }
       }
+      
+      // 使用基于词典的偏见检测
+      const biasResults = detectBiasWithRules(parsed.summary || resultText);
+      
+      // 格式化偏见结果
+      const biasComponents = [];
+      if (biasResults.emotionalWords > 0) {
+        biasComponents.push(`Emotional words: ${biasResults.emotionalWords} detected`);
+      }
+      if (biasResults.binaryOpposition > 0) {
+        biasComponents.push(`Binary opposition: ${biasResults.binaryOpposition} detected`);
+      }
+      if (biasResults.mindReading > 0) {
+        biasComponents.push(`Mind-reading: ${biasResults.mindReading} detected`);
+      }
+      if (biasResults.logicalFallacy > 0) {
+        biasComponents.push(`Logical fallacy: ${biasResults.logicalFallacy} detected`);
+      }
+      biasComponents.push(`Overall stance: ${biasResults.overallStance}`);
+      
+      parsed.bias = biasComponents;
     }
 
-    // 设置四维度
+    // 设置四维度 - 确保雷达图数据有效
     parsed.dimensions = {
       ts: parsed.credibility || 5,
       fd: Math.min(10, parsed.facts.length * 2) || 5, // 根据事实数量调整
@@ -427,6 +455,14 @@ function createRadarChart(dimensions) {
     radarChart.destroy();
   }
   
+  // 确保数据有效
+  const chartData = [
+    dimensions.ts || 0,
+    dimensions.fd || 0,
+    dimensions.eb || 0,
+    dimensions.cs || 0
+  ];
+  
   // 创建新图表
   radarChart = new Chart(ui.radarEl, {
     type: 'radar',
@@ -434,7 +470,7 @@ function createRadarChart(dimensions) {
       labels: ['Source Credibility', 'Fact Density', 'Emotional Neutrality', 'Consistency'],
       datasets: [{
         label: 'Analysis Score',
-        data: [dimensions.ts, dimensions.fd, dimensions.eb, dimensions.cs],
+        data: chartData,
         backgroundColor: 'rgba(37, 99, 235, 0.2)',
         borderColor: 'rgba(37, 99, 235, 1)',
         pointBackgroundColor: 'rgba(37, 99, 235, 1)',
@@ -452,6 +488,12 @@ function createRadarChart(dimensions) {
             stepSize: 2
           }
         }
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+        }
       }
     }
   });
@@ -464,7 +506,7 @@ function render(report) {
     
     // 显示摘要
     if (ui.summary) {
-      ui.summary.textContent = report.summary || '分析完成';
+      ui.summary.textContent = report.summary || 'Analysis completed';
       ui.summary.classList.remove('hidden');
     }
 
@@ -504,8 +546,8 @@ function render(report) {
       if (report.facts && report.facts.length > 0) {
         report.facts.forEach(fact => {
           const li = document.createElement('li');
-          // 显示内容和置信度
-          li.innerHTML = `${fact.content} <span style="color: #6b7280; font-size: 0.8em;">(${(fact.confidence * 100).toFixed(0)}%)</span>`;
+          // 显示内容和置信度 - 修复格式为 (conf: 百分比)
+          li.innerHTML = `${fact.content} <span style="color: #6b7280; font-size: 0.8em;">(conf: ${(fact.confidence * 100).toFixed(0)}%)</span>`;
           // 根据置信度添加颜色类
           if (fact.confidence >= 0.8) {
             li.classList.add('conf-high');
@@ -518,7 +560,7 @@ function render(report) {
         });
       } else {
         const li = document.createElement('li');
-        li.textContent = '未检测到明确的事实';
+        li.textContent = 'No explicit facts detected';
         ui.fact.appendChild(li);
       }
     }
@@ -528,8 +570,8 @@ function render(report) {
       if (report.opinions && report.opinions.length > 0) {
         report.opinions.forEach(op => {
           const li = document.createElement('li');
-          // 显示内容和置信度
-          li.innerHTML = `${op.content} <span style="color: #6b7280; font-size: 0.8em;">(${(op.confidence * 100).toFixed(0)}%)</span>`;
+          // 显示内容和置信度 - 修复格式为 (conf: 百分比)
+          li.innerHTML = `${op.content} <span style="color: #6b7280; font-size: 0.8em;">(conf: ${(op.confidence * 100).toFixed(0)}%)</span>`;
           // 根据置信度添加颜色类
           if (op.confidence >= 0.8) {
             li.classList.add('conf-high');
@@ -542,7 +584,7 @@ function render(report) {
         });
       } else {
         const li = document.createElement('li');
-        li.textContent = '未检测到明确的观点';
+        li.textContent = 'No explicit opinions detected';
         ui.opinion.appendChild(li);
       }
     }
@@ -557,7 +599,7 @@ function render(report) {
         });
       } else {
         const li = document.createElement('li');
-        li.textContent = '未检测到明显的偏见';
+        li.textContent = 'No obvious bias detected';
         ui.bias.appendChild(li);
       }
     }
@@ -565,14 +607,14 @@ function render(report) {
     // 填充发布商建议和公关回复
     const pubAdvice = document.getElementById('pubAdvice');
     const prAdvice = document.getElementById('prAdvice');
-    if (pubAdvice) pubAdvice.textContent = report.publisherAdvice || '暂无建议';
-    if (prAdvice) prAdvice.textContent = report.prReply || '暂无回复';
+    if (pubAdvice) pubAdvice.textContent = report.publisherAdvice || 'No advice provided';
+    if (prAdvice) prAdvice.textContent = report.prReply || 'No reply provided';
 
     // 显示结果区域
     if (ui.results) ui.results.classList.remove('hidden');
   } catch (e) {
     console.error('渲染结果失败:', e);
-    alert('渲染结果时出现错误: ' + e.message);
+    alert('Rendering error: ' + e.message);
   }
 }
 
@@ -663,7 +705,7 @@ async function analyzeContent(content, title) {
 async function handleAnalyze() {
   const raw = ui.input?.value.trim(); 
   if (!raw) {
-    alert('请输入要分析的内容');
+    alert('Please enter content to analyze');
     return; 
   }
   
@@ -675,7 +717,7 @@ async function handleAnalyze() {
   isAnalyzing = true;
   if (ui.btn) {
     ui.btn.disabled = true;
-    ui.btn.textContent = 'Analyze';
+    ui.btn.textContent = 'Analyzing...';
   }
   
   showProgress();
@@ -703,7 +745,7 @@ async function handleAnalyze() {
     
     // 显示错误信息
     if (ui.summary) {
-      ui.summary.textContent = '分析失败: ' + e.message;
+      ui.summary.textContent = 'Analysis failed: ' + e.message;
       ui.summary.classList.remove('hidden');
       if (ui.summary.classList) {
         ui.summary.classList.add('conf-low');
