@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 完整版（修复KIMI格式解析） */
+/* public/js/app.js  (ESM)  Final - 修复API端点 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -112,7 +112,7 @@ async function fetchContent(input) {
   }
 }
 
-// 解析API返回的结果 - 智能解析KIMI API的两种可能格式
+// 解析API返回的结果 - 修复偏见维度解析
 function parseResult(resultText) {
   try {
     console.log('开始解析结果:', resultText);
@@ -167,21 +167,61 @@ function parseResult(resultText) {
         });
       }
 
-      // 解析偏见
-      const biasMatch = resultText.match(/Bias:.*?(?=\n\n|$)/);
+      // 解析偏见 - 专门处理偏见的五个维度格式
+      const biasMatch = resultText.match(/Bias:\s*(.*?)(?=\n\n|$|\nPub:)/);
       if (biasMatch) {
-        parsed.bias = [biasMatch[0].trim()];
+        const biasText = biasMatch[1].trim();
+        
+        // 解析偏见的五个维度
+        const biasComponents = [];
+        
+        // 1. Emotional words (bias.emotional) - 攻击/贬义情感词数量
+        const emotionalMatch = biasText.match(/-E:N\s+conf:\s*(\d+\.?\d+)/);
+        if (emotionalMatch) {
+          biasComponents.push(`Emotional words: ${emotionalMatch[1]} (Attack/derogatory emotional words count)`);
+        }
+        
+        // 2. Binary opposition (bias.binary) - 敌对标签数量
+        const binaryMatch = biasText.match(/-B:N/);
+        if (binaryMatch) {
+          biasComponents.push('Binary opposition: Present (Hostile labels count)');
+        }
+        
+        // 3. Mind-reading (bias.mind) - 揣测动机数量
+        const mindMatch = biasText.match(/-M:N/);
+        if (mindMatch) {
+          biasComponents.push('Mind-reading: Present (Assuming motives/intents count)');
+        }
+        
+        // 4. Logical fallacy (bias.fallacy) - 逻辑谬误数量
+        const fallacyMatch = biasText.match(/-F:N/);
+        if (fallacyMatch) {
+          biasComponents.push('Logical fallacy: Present (Classic fallacies count)');
+        }
+        
+        // 5. Overall stance (bias.stance) - 总体立场
+        const stanceMatch = biasText.match(/-Stance:([^-\n]+)/);
+        if (stanceMatch) {
+          const stance = stanceMatch[1].trim();
+          biasComponents.push(`Overall stance: ${stance} (neutral/leaning/critical + percentage)`);
+        }
+        
+        if (biasComponents.length > 0) {
+          parsed.bias = biasComponents;
+        } else {
+          parsed.bias = [biasText];
+        }
       }
 
       // 解析发布商建议和PR回复
       const pubMatch = resultText.match(/Pub:\s*(.*?)(?=\nPR:|$)/i);
       if (pubMatch) {
-        parsed.publisherAdvice = pubMatch[1].trim();
+        parsed.publisherAdvice = pubMatch[1].replace(/\(≤\d+w\)/g, '').trim();
       }
       
       const prMatch = resultText.match(/PR:\s*(.*?)(?=\nSum:|$)/i);
       if (prMatch) {
-        parsed.prReply = prMatch[1].trim();
+        parsed.prReply = prMatch[1].replace(/\(≤\d+w\)/g, '').trim();
       }
 
       // 解析摘要
@@ -200,7 +240,49 @@ function parseResult(resultText) {
       // 处理自然语言格式（KIMI的解释性回复）
       console.log('检测到自然语言格式');
       
-      // 从文本中提取关键信息
+      // 先检查是否包含偏见指标格式
+      const biasPattern = /-E:N\s+conf:\s*\d+\.?\d+\s+-B:N\s+-M:N\s+-F:N\s+-Stance:[^-\n]+/;
+      if (biasPattern.test(resultText)) {
+        console.log('检测到偏见指标格式');
+        // 提取偏见指标
+        const biasText = resultText.match(biasPattern)?.[0];
+        if (biasText) {
+          const biasComponents = [];
+          
+          // 解析偏见的五个维度
+          const eMatch = biasText.match(/-E:N\s+conf:\s*(\d+\.?\d+)/);
+          if (eMatch) {
+            biasComponents.push(`Emotional words: ${eMatch[1]} (Attack/derogatory emotional words count)`);
+          }
+          
+          const bMatch = biasText.match(/-B:N/);
+          if (bMatch) {
+            biasComponents.push('Binary opposition: Present (Hostile labels count)');
+          }
+          
+          const mMatch = biasText.match(/-M:N/);
+          if (mMatch) {
+            biasComponents.push('Mind-reading: Present (Assuming motives/intents count)');
+          }
+          
+          const fMatch = biasText.match(/-F:N/);
+          if (fMatch) {
+            biasComponents.push('Logical fallacy: Present (Classic fallacies count)');
+          }
+          
+          const stanceMatch = biasText.match(/-Stance:([^-\n]+)/);
+          if (stanceMatch) {
+            const stance = stanceMatch[1].trim();
+            biasComponents.push(`Overall stance: ${stance} (neutral/leaning/critical + percentage)`);
+          }
+          
+          if (biasComponents.length > 0) {
+            parsed.bias = biasComponents;
+          }
+        }
+      }
+      
+      // 从文本中提取其他信息
       const lines = resultText.split('\n');
       
       // 尝试提取可信度
@@ -274,14 +356,16 @@ function parseResult(resultText) {
         }
       }
 
-      // 提取偏见信息
-      if (resultText.toLowerCase().includes('bias') || 
-          resultText.toLowerCase().includes('negative') ||
-          resultText.toLowerCase().includes('positive')) {
-        parsed.bias = [resultText.match(/(bias is|bias.*?negative|bias.*?positive)/gi)?.[0] || 'Detected bias in review'];
-      } else if (resultText.toLowerCase().includes('strong language') || 
-                 resultText.toLowerCase().includes('emotional')) {
-        parsed.bias = ['Detected emotional language'];
+      // 如果偏见还没解析到，尝试从文本中提取
+      if (parsed.bias.length === 0) {
+        if (resultText.toLowerCase().includes('bias') || 
+            resultText.toLowerCase().includes('negative') ||
+            resultText.toLowerCase().includes('positive')) {
+          parsed.bias = [resultText.match(/(bias is|bias.*?negative|bias.*?positive)/gi)?.[0] || 'Detected bias in review'];
+        } else if (resultText.toLowerCase().includes('strong language') || 
+                   resultText.toLowerCase().includes('emotional')) {
+          parsed.bias = ['Detected emotional language'];
+        }
       }
 
       // 提取摘要 - 使用文本的总结部分
@@ -591,7 +675,7 @@ async function handleAnalyze() {
   isAnalyzing = true;
   if (ui.btn) {
     ui.btn.disabled = true;
-    ui.btn.textContent = 'Analyzing...';
+    ui.btn.textContent = 'Analyze';
   }
   
   showProgress();
