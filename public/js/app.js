@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修复解析函数 */
+/* public/js/app.js  (ESM)  Final - 恢复原始样式 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -247,11 +247,13 @@ function render(report) {
       const ebBar = document.getElementById('ebBar');
       const csBar = document.getElementById('csBar');
       
+      // 显示具体的数字值
       if (tsVal) tsVal.textContent = report.dimensions.ts.toFixed(1);
       if (fdVal) fdVal.textContent = report.dimensions.fd.toFixed(1);
       if (ebVal) ebVal.textContent = report.dimensions.eb.toFixed(1);
       if (csVal) csVal.textContent = report.dimensions.cs.toFixed(1);
       
+      // 设置条形图宽度
       if (tsBar) tsBar.style.width = `${Math.min(100, report.dimensions.ts * 10)}%`;
       if (fdBar) fdBar.style.width = `${Math.min(100, report.dimensions.fd * 10)}%`;
       if (ebBar) ebBar.style.width = `${Math.min(100, report.dimensions.eb * 10)}%`;
