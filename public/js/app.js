@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 完整版 */
+/* public/js/app.js  (ESM)  Final - 完整版（修复置信度显示） */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -112,7 +112,7 @@ async function fetchContent(input) {
   }
 }
 
-// 解析API返回的结果 - 增强版本，能处理多种格式
+// 解析API返回的结果 - 增强版本，能处理多种格式并提取置信度
 function parseResult(resultText) {
   try {
     console.log('开始解析结果:', resultText);
@@ -149,16 +149,46 @@ function parseResult(resultText) {
         parsed.credibility = parseFloat(credibilityMatch[1]);
       }
 
-      // 解析事实 - 支持新旧格式
-      const factsMatches = resultText.match(/<fact>(.*?)<\/fact>/gi);
+      // 解析事实 - 提取置信度和内容
+      const factsMatches = resultText.match(/(\d+\.?\d*)\s*<fact>(.*?)<\/fact>/gi);
       if (factsMatches) {
-        parsed.facts = factsMatches.map(fact => fact.replace(/<\/?fact>/gi, '').trim());
+        parsed.facts = factsMatches.map(fact => {
+          const confMatch = fact.match(/(\d+\.?\d*)/);
+          const contentMatch = fact.match(/<fact>(.*?)<\/fact>/i);
+          const confidence = confMatch ? parseFloat(confMatch[1]) : 0;
+          const content = contentMatch ? contentMatch[1].replace(/<\/?fact>/g, '').trim() : fact.replace(/<\/?fact>/g, '').trim();
+          return { content, confidence };
+        });
+      } else {
+        // 如果没有置信度，只提取内容
+        const simpleFacts = resultText.match(/<fact>(.*?)<\/fact>/gi);
+        if (simpleFacts) {
+          parsed.facts = simpleFacts.map(fact => {
+            const content = fact.replace(/<\/?fact>/g, '').trim();
+            return { content, confidence: 0 }; // 默认置信度为0
+          });
+        }
       }
 
-      // 解析观点 - 支持新旧格式
-      const opinionsMatches = resultText.match(/<opinion>(.*?)<\/opinion>/gi);
+      // 解析观点 - 提取置信度和内容
+      const opinionsMatches = resultText.match(/(\d+\.?\d*)\s*<opinion>(.*?)<\/opinion>/gi);
       if (opinionsMatches) {
-        parsed.opinions = opinionsMatches.map(op => op.replace(/<\/?opinion>/gi, '').trim());
+        parsed.opinions = opinionsMatches.map(op => {
+          const confMatch = op.match(/(\d+\.?\d*)/);
+          const contentMatch = op.match(/<opinion>(.*?)<\/opinion>/i);
+          const confidence = confMatch ? parseFloat(confMatch[1]) : 0;
+          const content = contentMatch ? contentMatch[1].replace(/<\/?opinion>/g, '').trim() : op.replace(/<\/?opinion>/g, '').trim();
+          return { content, confidence };
+        });
+      } else {
+        // 如果没有置信度，只提取内容
+        const simpleOpinions = resultText.match(/<opinion>(.*?)<\/opinion>/gi);
+        if (simpleOpinions) {
+          parsed.opinions = simpleOpinions.map(op => {
+            const content = op.replace(/<\/?opinion>/g, '').trim();
+            return { content, confidence: 0 }; // 默认置信度为0
+          });
+        }
       }
 
       // 解析偏见
@@ -236,9 +266,9 @@ function parseResult(resultText) {
       const lines = resultText.split('\n');
       for (const line of lines) {
         if (line.toLowerCase().includes('fact') && !line.toLowerCase().includes('opinion')) {
-          parsed.facts.push(line);
+          parsed.facts.push({ content: line, confidence: 0 });
         } else if (line.toLowerCase().includes('opinion')) {
-          parsed.opinions.push(line);
+          parsed.opinions.push({ content: line, confidence: 0 });
         }
       }
       
@@ -270,8 +300,8 @@ function parseResult(resultText) {
     console.error('解析结果失败:', e);
     return {
       credibility: 0,
-      facts: ['解析失败: ' + e.message],
-      opinions: ['解析失败: ' + e.message],
+      facts: [{ content: '解析失败: ' + e.message, confidence: 0 }],
+      opinions: [{ content: '解析失败: ' + e.message, confidence: 0 }],
       bias: ['解析失败: ' + e.message],
       publisherAdvice: '解析失败: ' + e.message,
       prReply: '解析失败: ' + e.message,
@@ -367,7 +397,16 @@ function render(report) {
       if (report.facts && report.facts.length > 0) {
         report.facts.forEach(fact => {
           const li = document.createElement('li');
-          li.textContent = fact;
+          // 显示内容和置信度
+          li.innerHTML = `${fact.content} <span style="color: #6b7280; font-size: 0.8em;">(${(fact.confidence * 100).toFixed(0)}%)</span>`;
+          // 根据置信度添加颜色类
+          if (fact.confidence >= 0.8) {
+            li.classList.add('conf-high');
+          } else if (fact.confidence >= 0.5) {
+            li.classList.add('conf-mid');
+          } else {
+            li.classList.add('conf-low');
+          }
           ui.fact.appendChild(li);
         });
       } else {
@@ -382,7 +421,16 @@ function render(report) {
       if (report.opinions && report.opinions.length > 0) {
         report.opinions.forEach(op => {
           const li = document.createElement('li');
-          li.textContent = op;
+          // 显示内容和置信度
+          li.innerHTML = `${op.content} <span style="color: #6b7280; font-size: 0.8em;">(${(op.confidence * 100).toFixed(0)}%)</span>`;
+          // 根据置信度添加颜色类
+          if (op.confidence >= 0.8) {
+            li.classList.add('conf-high');
+          } else if (op.confidence >= 0.5) {
+            li.classList.add('conf-mid');
+          } else {
+            li.classList.add('conf-low');
+          }
           ui.opinion.appendChild(li);
         });
       } else {
