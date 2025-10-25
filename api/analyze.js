@@ -1,10 +1,9 @@
-// api/analyze.js - KIMI API版本
+// api/analyze.js - KIMI API 版本（prompt 2.0）
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 检查KIMI API密钥
   const apiKey = process.env.KIMI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'Missing KIMI_API_KEY environment variable' });
@@ -12,22 +11,25 @@ export default async function handler(req, res) {
 
   try {
     const { content, title } = req.body;
-    
     if (!content || !title) {
       return res.status(400).json({ error: 'content or title empty' });
     }
 
-    // 构建KIMI API请求的prompt
+    // 关键：用「必须替换」指令替代占位符
     const prompt = `FactLens-EN-v2
 Title:${title}
-Credibility:X/10
-Facts:1.conf:0.XX<fact>sentence</fact>
-Opinions:1.conf:0.XX<opinion>sentence</opinion>
-Bias:-E:N conf:0.XX -B:N -M:N -F:N -Stance:neutral/leaning X%
-Pub:xxx(≤15w) PR:xxx(≤8w) Sum:xxx(≤8w)
-Text:${content}`.trim();
+Credibility:<fill_number>/10
+Facts:1. conf:<fill_0到1> <fact>具体事实句子</fact>
+Opinions:1. conf:<fill_0到1> <opinion>具体观点句子</opinion>
+Bias:-E:<N|Y> conf:<fill_0到1> -B:<N|Y> -M:<N|Y> -F:<N|Y> -Stance:neutral/leaning <fill_percent>%
+Pub:<≤15w> PR:<≤8w> Sum:<≤8w>
+Text:${content}
 
-    // 调用KIMI API
+要求：
+1. 用真实数字或句子替换所有尖括号内容，不得保留尖括号。
+2. 不得出现“你”“用户”“示范”“示例”等教学性文字。
+3. 若信息不足，赋最低可信值或“N”。`.trim();
+
     const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -35,10 +37,10 @@ Text:${content}`.trim();
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'moonshot-v1-8k',  // 或者使用其他KIMI模型
+        model: 'moonshot-v1-8k',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 600,
+        max_tokens: 700,
       }),
     });
 
@@ -49,13 +51,9 @@ Text:${content}`.trim();
     }
 
     const data = await response.json();
-    
     res.status(200).json(data);
   } catch (e) {
     console.error('API Error:', e);
     res.status(500).json({ error: e.message });
   }
 }
-
-
-
