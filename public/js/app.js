@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 基于词典规则的偏见检测 */
+/* public/js/app.js  (ESM)  Final - 修复正则表达式语法 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -84,7 +84,7 @@ const intentVerbs = [
 const logicalFallacyPatterns = [
   { type: "slippery slope", regex: /\b(will lead to|inevitably lead|eventually result in|start down the path|begin the trend)\b/gi },
   { type: "ad hominem", regex: /\b(idiot|liar|fool|stupid|moron|jerk|foolish|ignorant)\b/gi },
-  { type: "straw man", regex /\b(they claim|they say|they argue)\s+.*\b(extreme|ridiculous|absurd|unreasonable)\b/gi },
+  { type: "straw man", regex: /\b(they claim|they say|they argue)\s+.*\b(extreme|ridiculous|absurd|unreasonable)\b/gi },
   { type: "false dilemma", regex: /\b(either.*or|only two options|black and white|no middle ground)\b/gi },
   { type: "appeal to authority", regex: /\b(expert says|famous person said|authority figure claims)\b/gi },
   { type: "hasty generalization", regex: /\b(all.*are|every.*is|never.*not|always.*will)\b/gi },
