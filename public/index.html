@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FactLens - Instant Article Bias Check</title>
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="icon" href="/favicon.ico" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>FactLens</h1>
+      <p>Instant Article Bias Check</p>
+    </header>
+
+    <section class="input-group">
+      <textarea id="urlInput" placeholder="Paste article URL or text content here..."></textarea>
+      <button id="analyzeBtn" class="btn">Analyze</button>
+    </section>
+
+    <section id="progress" class="progress-container">
+      <h2>Analysis in Progress</h2>
+      <div class="progress-bar">
+        <div id="progressInner" class="progress-bar-inner"></div>
+      </div>
+      <p>Progress: <span id="pct">0</span>%</p>
+    </section>
+
+    <section id="summary" class="summary hidden"></section>
+
+    <section id="fourDim" class="four-dim hidden">
+      <div class="dim-item">
+        <h3>Source Credibility</h3>
+        <div class="dim-bar"><div id="tsBar" class="dim-bar-fill"></div></div>
+        <p id="tsVal">0.0</p>
+      </div>
+      <div class="dim-item">
+        <h3>Fact Density</h3>
+        <div class="dim-bar"><div id="fdBar" class="dim-bar-fill"></div></div>
+        <p id="fdVal">0.0</p>
+      </div>
+      <div class="dim-item">
+        <h3>Emotional Neutrality</h3>
+        <div class="dim-bar"><div id="ebBar" class="dim-bar-fill"></div></div>
+        <p id="ebVal">0.0</p>
+      </div>
+      <div class="dim-item">
+        <h3>Consistency</h3>
+        <div class="dim-bar"><div id="csBar" class="dim-bar-fill"></div></div>
+        <p id="csVal">0.0</p>
+      </div>
+    </section>
+
+    <section id="results" class="results hidden">
+      <div class="result-section">
+        <h3>Facts</h3>
+        <ul id="factList"></ul>
+      </div>
+      <div class="result-section">
+        <h3>Opinions</h3>
+        <ul id="opinionList"></ul>
+      </div>
+      <div class="result-section">
+        <h3>Bias</h3>
+        <ul id="biasList"></ul>
+      </div>
+      <div class="result-section">
+        <h3>Publisher Advice</h3>
+        <p id="pubAdvice"></p>
+      </div>
+      <div class="result-section">
+        <h3>PR Reply</h3>
+        <p id="prAdvice"></p>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+  <script src="/scripts/warm-edge.js"></script>
+</body>
+</html>
+
+
+
