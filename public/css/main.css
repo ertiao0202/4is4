@@ -66,6 +66,7 @@ body {
   font-size: 1rem;
   min-height: 150px;
   resize: vertical;
+  margin-bottom: 1rem;
 }
 
 .btn {
@@ -77,8 +78,8 @@ body {
   font-size: 1rem;
   border-radius: 5px;
   cursor: pointer;
-  margin-top: 1rem;
   transition: background 0.3s;
+  width: 100%;
 }
 
 .btn:hover {
@@ -91,7 +92,6 @@ body {
 }
 
 .progress-container {
-  display: none;
   background: white;
   padding: 2rem;
   border-radius: 10px;
@@ -99,8 +99,8 @@ body {
   margin-bottom: 2rem;
 }
 
-.progress-container.show {
-  display: block;
+.progress-container.hidden {
+  display: none;
 }
 
 .progress-bar {
@@ -120,15 +120,15 @@ body {
 }
 
 .results {
-  display: none;
   background: white;
   padding: 2rem;
   border-radius: 10px;
   box-shadow: var(--shadow);
+  margin-bottom: 2rem;
 }
 
-.results.show {
-  display: block;
+.results.hidden {
+  display: none;
 }
 
 .result-section {
@@ -203,7 +203,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 @media (max-width: 768px) {
