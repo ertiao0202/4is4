@@ -1,4 +1,4 @@
-/* public/js/app.js  (ESM)  Final - 修正四维度分析 */
+/* public/js/app.js  (ESM)  Final - 修正事实和观点提取 */
 const $ = s => document.querySelector(s);
 const url = '/api/analyze'; // 更新API端点
 
@@ -349,6 +349,112 @@ function calculateFourDimensions(content) {
   return dimensions;
 }
 
+// 提取事实和观点的函数
+function extractFactsAndOpinions(content) {
+  const facts = [];
+  const opinions = [];
+  
+  // 标准格式提取
+  if (content.includes('Credibility:') && (content.includes('<fact>') || content.includes('<opinion>'))) {
+    // 提取事实
+    const factMatches = content.match(/(\d+\.?\d*)\.conf:\s*(\d+\.?\d+)\s*<fact>(.*?)<\/fact>/gs);
+    if (factMatches) {
+      factMatches.forEach(fact => {
+        const confMatch = fact.match(/conf:\s*(\d+\.?\d+)/);
+        const contentMatch = fact.match(/<fact>(.*?)<\/fact>/s);
+        const confidence = confMatch ? parseFloat(confMatch[1]) : 0;
+        const text = contentMatch ? contentMatch[1].trim() : fact.replace(/<\/?fact>/g, '').trim();
+        if (text) {
+          facts.push({ content: text, confidence });
+        }
+      });
+    }
+    
+    // 提取观点
+    const opinionMatches = content.match(/(\d+\.?\d*)\.conf:\s*(\d+\.?\d+)\s*<opinion>(.*?)<\/opinion>/gs);
+    if (opinionMatches) {
+      opinionMatches.forEach(op => {
+        const confMatch = op.match(/conf:\s*(\d+\.?\d+)/);
+        const contentMatch = op.match(/<opinion>(.*?)<\/opinion>/s);
+        const confidence = confMatch ? parseFloat(confMatch[1]) : 0;
+        const text = contentMatch ? contentMatch[1].trim() : op.replace(/<\/?opinion>/g, '').trim();
+        if (text) {
+          opinions.push({ content: text, confidence });
+        }
+      });
+    }
+  } else {
+    // 自然语言格式提取
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    
+    // 事实关键词
+    const factKeywords = ['according to', 'studies show', 'research indicates', 'data shows', 
+                         'statistics reveal', 'findings suggest', 'evidence shows', 'study found',
+                         'report states', 'document shows', 'figures indicate', 'results show',
+                         'is', 'are', 'was', 'were', 'has', 'have', 'had', 'can be', 'shows that',
+                         'demonstrates', 'proves', 'confirms', 'reveals', 'reports'];
+    
+    // 观点关键词
+    const opinionKeywords = ['think', 'believe', 'feel', 'opinion', 'view', 'perspective', 
+                            'seems', 'appears', 'suggests', 'argues', 'claims', 'believes',
+                            'in my opinion', 'in my view', 'from my perspective', 'I think',
+                            'I believe', 'should', 'must', 'ought to', 'probably', 'likely',
+                            'possibly', 'perhaps', 'maybe', 'might', 'could', 'I feel'];
+    
+    sentences.forEach(sentence => {
+      const lowerSentence = sentence.toLowerCase();
+      let isFact = false;
+      let isOpinion = false;
+      
+      // 检查是否包含事实关键词
+      if (factKeywords.some(keyword => lowerSentence.includes(keyword))) {
+        isFact = true;
+      }
+      
+      // 检查是否包含观点关键词
+      if (opinionKeywords.some(keyword => lowerSentence.includes(keyword))) {
+        isOpinion = true;
+      }
+      
+      // 如果句子包含事实特征但不含观点特征，则认为是事实
+      if (isFact && !isOpinion) {
+        facts.push({ 
+          content: sentence.trim(), 
+          confidence: 0.8 
+        });
+      } 
+      // 如果句子包含观点特征，则认为是观点
+      else if (isOpinion) {
+        opinions.push({ 
+          content: sentence.trim(), 
+          confidence: 0.7 
+        });
+      }
+      // 其他情况根据上下文判断
+      else {
+        // 默认分配，基于句子特征
+        if (sentence.includes('that') || sentence.match(/\d+/) || sentence.includes('percent') || 
+            sentence.includes('number') || sentence.includes('study') || sentence.includes('data')) {
+          facts.push({ 
+            content: sentence.trim(), 
+            confidence: 0.6 
+          });
+        } else {
+          opinions.push({ 
+            content: sentence.trim(), 
+            confidence: 0.5 
+          });
+        }
+      }
+    });
+  }
+  
+  console.log('提取的事实:', facts);
+  console.log('提取的观点:', opinions);
+  
+  return { facts, opinions };
+}
+
 // 解析API返回的结果 - 使用基于词典的偏见检测
 function parseResult(resultText) {
   try {
@@ -465,28 +571,10 @@ function parseResult(resultText) {
         }
       }
 
-      // 提取事实
-      const factKeywords = ['fact', 'claim', 'states', 'indicates', 'shows', 'demonstrates'];
-      for (const line of lines) {
-        if (factKeywords.some(keyword => line.toLowerCase().includes(keyword)) && 
-            !line.toLowerCase().includes('opinion')) {
-          const factText = line.replace(/^\d+\.\s*|\*\*.*?\*\*:\s*/g, '').trim();
-          if (factText && factText.length > 10) { // 避免太短的内容
-            parsed.facts.push({ content: factText, confidence: 0.6 }); // 默认中等置信度
-          }
-        }
-      }
-      
-      // 提取观点
-      const opinionKeywords = ['opinion', 'view', 'believe', 'think', 'appears', 'seems'];
-      for (const line of lines) {
-        if (opinionKeywords.some(keyword => line.toLowerCase().includes(keyword))) {
-          const opinionText = line.replace(/^\d+\.\s*|\*\*.*?\*\*:\s*/g, '').trim();
-          if (opinionText && opinionText.length > 10) {
-            parsed.opinions.push({ content: opinionText, confidence: 0.7 }); // 默认较高置信度
-          }
-        }
-      }
+      // 使用新的提取函数来处理事实和观点
+      const extracted = extractFactsAndOpinions(resultText);
+      parsed.facts = extracted.facts;
+      parsed.opinions = extracted.opinions;
       
       // 提取摘要
       const summaryPhrases = ['based on this analysis', 'in summary', 'conclusion', 'important to approach'];
